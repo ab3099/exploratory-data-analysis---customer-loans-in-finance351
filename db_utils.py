@@ -55,6 +55,12 @@ class DataTransform(pd.DataFrame):
             self = self.dropna(subset=[col]).copy()  # Make a copy before dropping NaN values
             self[col] = self[col].astype('int64')
 
+    def convert_term_to_int(self):
+        """Convert the 'term' column to int and rename to 'term_months'."""
+        self['term_months'] = self['term'].str.replace(r'\D', '', regex=True).astype(int)
+        self.drop(columns=['term'], inplace=True)
+        return self
+    
     def date_format(self, date_columns):
         """Format date columns in the DataFrame."""
         for col in date_columns:
@@ -132,39 +138,15 @@ class DataFrameTransform(DataTransform):
         return null_counts
     
     def identify_skewed_columns(self, threshold=1):
-    # Select numeric columns
+    # Select only numeric columns
         numeric_columns = self.select_dtypes(include=['number']).columns
-    
-    # Calculate skewness for numeric columns
+    # Calculate skewness for all columns
         skewness = self[numeric_columns].apply(lambda x: x.skew())
     
     # Identify skewed columns based on the threshold
         skewed_columns = skewness[abs(skewness) > threshold].index.tolist()
         return skewed_columns
     
-    def transform_skewed_columns(self, skewed_columns):
-        """Transform skewed columns to determine the most popular best transformation."""
-        best_transformation_counts = {}
-
-        for col in skewed_columns:
-            original_skewness = self[col].skew()
-
-            # Apply log transformation
-            transformed_col_log = np.log1p(self[col])
-            reduction_log = abs(original_skewness) - abs(transformed_col_log.skew())
-
-            # Apply square root transformation
-            transformed_col_sqrt = np.sqrt(self.df[col])
-            reduction_sqrt = abs(original_skewness) - abs(transformed_col_sqrt.skew())
-
-            # Choose the best transformation
-            transformations = {
-                'log': (transformed_col_log, reduction_log),
-                'sqrt': (transformed_col_sqrt, reduction_sqrt),
-            }
-
-            col_best_transformation, _ = max(transformations.items(), key=lambda x: x[1][1])
-
     def apply_transformation(self, skewed_columns):
         """Apply the most popular best transformation to the skewed columns."""
     
@@ -176,7 +158,7 @@ class DataFrameTransform(DataTransform):
             reduction_log = abs(original_skewness) - abs(transformed_col_log.skew())
 
             # Apply square root transformation
-            transformed_col_sqrt = np.sqrt(self.df[col])
+            transformed_col_sqrt = np.sqrt(self[col])
             reduction_sqrt = abs(original_skewness) - abs(transformed_col_sqrt.skew())
 
             # Choose the best transformation
@@ -211,7 +193,28 @@ class DataFrameTransform(DataTransform):
 
         # Drop rows with NaN values in specified columns
         self = self.dropna(subset=columns)
-   
+
+    def remove_highly_correlated_columns(self, correlation_threshold=0.8):
+        # Calculate the correlation matrix
+         # Select only numeric columns
+        numeric_columns = self.select_dtypes(include=np.number)
+
+        # Calculate the correlation matrix for numeric columns
+        correlation_matrix = numeric_columns.corr()
+
+        # Find highly correlated columns
+        highly_correlated_columns = []
+        for i in range(len(correlation_matrix.columns)):
+            for j in range(i + 1, len(correlation_matrix.columns)):
+                if abs(correlation_matrix.iloc[i, j]) > correlation_threshold:
+                    colname = correlation_matrix.columns[i]
+                    highly_correlated_columns.append(colname)
+
+        # Drop highly correlated columns
+        self = self.drop(columns=highly_correlated_columns)
+
+        # Optionally, you may return the updated DataFrame
+        return self
     
 
 class Plotter: 
@@ -261,7 +264,7 @@ class Plotter:
 
 
         for col in numeric_columns:
-            plt.bar(col + '_transformed', self[col].skew(), color='green', alpha=0.7)
+            plt.bar(col + '_transformed', self[col + '_transformed'].skew(), color='green', alpha=0.7)
 
         plt.xlabel('Columns')
         plt.ylabel('Transformed Values')
@@ -270,23 +273,28 @@ class Plotter:
         plt.show()
 
     
-    def plot_all_column_outliers(self, data_frame, title='Boxplots for Outlier Detection'):
+    def plot_all_column_outliers(self, title='Boxplots for Outlier Detection'):
         """Generate a boxplot to visualize outliers in all columns simultaneously."""
         plt.figure(figsize=(15, 8))
 
-        sns.boxplot(data=data_frame)
+        ax = sns.boxplot(data=self)
+        ax.set(xlabel='Columns', ylabel='Values')
+
+        sns.boxplot(self)
         plt.title(title)
         plt.xticks(rotation=45, ha='right')
         plt.show()
     
     def plot_correlation_matrix(self, dataframe):
-        correlation_matrix = dataframe.corr()
+        numeric_columns = dataframe.select_dtypes(include=np.number)
+
+    # Calculate the correlation matrix for numeric columns
+        correlation_matrix = numeric_columns.corr()
 
         plt.figure(figsize=(12, 8))
         sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
         plt.title('Correlation Matrix')
         plt.show()
-
 
 # Example Usage:
 # Create an instance of RDSDatabaseConnector
@@ -322,6 +330,7 @@ loan_status_replacements = {
 transformer.convert_float_to_int_with_mean(float_to_int_columns_with_mean)
 transformer.convert_float_to_int_without_mean(float_to_int_columns_without_mean)
 transformer.date_format(date_columns_to_format)
+transformer.convert_term_to_int()
 
 transformer.replace_values_in_column('loan_status', loan_status_replacements)
 
@@ -353,60 +362,16 @@ null_counts_before= transformer_1.check_null_before()
 
 plotter= Plotter()
 plotter.plot_significant_null_counts(null_counts_before, 'Significant Null Counts Before Removal', threshold=12, color='red')
-transformer_1.drop_columns_with_high_nulls(threshold=12)
-transformer_1.impute(threshold=8)
+transformer_1.drop_columns_with_high_nulls(threshold=30)
+transformer_1.impute(threshold=30)
 transformer_1.check_null()
-
-plotter.plot_all_column_outliers(transformer, title='Boxplots for Outlier Detection After Transformation')
-
-
-transformer_1 = DataFrameTransform(df_from_db)
-plotter= Plotter()
-
-
-# Create an instance of Plotter f0r sjewness
-plotter = Plotter()
-
-plotter.plot_skewness(transformer_1.df, title='Skewness Visualization')
-skewed_columns = transformer_1.identify_skewed_columns()
+skewed_columns= transformer_1.identify_skewed_columns(threshold=1)
+plotter.plot_skewness(transformer_1, title='Skewness Visualization')
 transformer_1.apply_transformation(skewed_columns)
-plotter.plot_transformed_data(transformer_1.df, title='Transformed Data Visualization')
-outlier_columns_to_handle = ['loan_amount', 'funded_amount', 'funded_amount_inv']
-transformer_1.handle_outliers_zscore(columns=outlier_columns_to_handle, threshold=3)
-plotter.plot_all_column_outliers(transformer_1.handle_outliers_zscore, title='Boxplots for Outlier Detection After Transformation')
-# Example usage
-transformer_1.df.to_csv('transformed_data.csv', index=False)
+transformer_1.to_csv('new_dataframe.csv', index=False)
+plotter.plot_transformed_data(transformer_1, title='Transformed Data Visualization')
+plotter.plot_all_column_outliers(transformer_1, title='Boxplots for Outlier Detection After Transformation')
 
-plotter.plot_correlation_matrix(transformer_1.df)
-
-
-# Create an instance of DataFrameTransform
-transformer_1 = DataFrameTransform(df_from_db)
-
-# Check null counts before any transformation
-null_counts_before = transformer_1.check_null_before()
-
-# Create an instance of Plotter
-plotter = Plotter()
-
-# Plot significant null counts before removing columns
-plotter.plot_significant_null_counts(null_counts_before, 'Significant Null Counts Before Removal', threshold=10, color='red')
-
-# Drop columns with high nulls and impute null values
-transformer_1.drop_columns_with_high_nulls(threshold=10)
-transformer_1.impute(threshold=10)
-
-# Check null counts after transformations
-null_counts_after = transformer_1.check_null()
-
-# Plot boxplots for outlier detection after transformations
-plotter.plot_all_column_outliers(transformer_1.df, title='Boxplots for Outlier Detection After Transformation')
-
-# Identify skewed columns
-skewed_columns = transformer_1.identify_skewed_columns()
-
-# Apply transformations to skewed columns
-transformer_1.apply_transformation(skewed_columns)
 
 # Columns to handle outliers with Z-score method
 outlier_columns_to_handle = ['loan_amount', 'funded_amount', 'funded_amount_inv']
@@ -414,49 +379,13 @@ outlier_columns_to_handle = ['loan_amount', 'funded_amount', 'funded_amount_inv'
 # Handle outliers using Z-score
 transformer_1.handle_outliers_zscore(columns=outlier_columns_to_handle, threshold=3)
 
+
 # Plot boxplots for outlier detection after handling outliers
-plotter.plot_all_column_outliers(transformer_1.handle_outliers_zscore, title='Boxplots for Outlier Detection After Transformation')
+plotter.plot_all_column_outliers(transformer_1, title='Boxplots for Outlier Detection After Transformation')
+plotter.plot_correlation_matrix(transformer_1)
+transformer_1.remove_highly_correlated_columns(correlation_threshold=0.8)
 
 
 
 
-# Print or use the list of skewed columns
-print("Skewed Columns:", skewed_columns)
-plotterlotter.plot_skewness(skewness, title='Skewness Analysis')
-transformer.transform_skewed_columns()
 
-plotter.plot_skewness(skewness, title='Skewness Analysis')
-plotter.plot_transformed_skewness(transformations_dict_data, title='Transformed Skewness Analysis')
-
-def handle_outliers_zscore(self, columns, threshold=3):
-        """
-        Remove outliers in specified columns using Z-score method.
-
-        Parameters:
-        - columns: List of column names to remove outliers.
-        - threshold: Z-score threshold beyond which data points are considered outliers.
-        """
-        z_scores = np.abs((self.df[columns] - self.df[columns].mean()) / self.df[columns].std())
-        outliers = z_scores > threshold
-
-        # Replace outliers with NaN
-        self.df[columns] = np.where(outliers, np.nan, self.df[columns])
-
-        # Drop rows with NaN values in specified columns
-        self.df = self.df.dropna(subset=columns)
-
-# Example Usage:
-
-# Assuming you have a DataFrame named 'original_data'
-# and an instance of your DataFrameTransform class named 'transformer'
-
-# Identify and transform skewed columns
-skewed_columns = transformer.identify_skewed_columns()
-transformer.apply_transformation(skewed_columns)
-
-# Remove outliers in specific columns using Z-score method
-outlier_columns_to_handle = ['loan_amount', 'funded_amount', 'funded_amount_inv']
-transformer.handle_outliers_zscore(columns=outlier_columns_to_handle, threshold=3)
-
-# Now, you can check the transformed DataFrame
-print(transformer.df)
