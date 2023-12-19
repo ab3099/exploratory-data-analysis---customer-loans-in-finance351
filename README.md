@@ -12,6 +12,7 @@
    - [DataFrameInfo Class](#dataframeinfo-class)
    - [DataFrameTransform Class](#dataframetransform-class)
    - [Plotter Class](#plotter-class)
+3. [Loan Analysis](#loan-analysis)
    
 # RDSDatabaseConnector
 
@@ -393,4 +394,114 @@ Generate a heatmap to visualize the correlation matrix for numeric columns in a 
 
 - **Parameters:**
   - `dataframe`: Pandas DataFrame containing numeric columns.
+# Loan Analysis 
+
+This section contains informations the loan data analysis and generating visualizations. The code performs various tasks related to loan data analysis, including calculating percentages, visualizing results, and exploring loan status by different indicators.
+
+## Tasks Performed
+
+### 1. Percentage of Loans Recovered
+
+- **Calculation:**
+  - Calculate the percentage of loans recovered against investor funding.
+  - Calculate the percentage of loans recovered against the total amount funded.
+
+- **Visualization:**
+  - Visualize the results with histograms.
+    ```python
+
+# Calculate the percentage of loans recovered against investor funding and the total amount funded
+df_subset['recovered_percent'] = (df_subset['recoveries'] / df_subset['funded_amount_inv']) * 100
+df_subset['funded_percent'] = (df_subset['funded_amount_inv'] / df_subset['loan_amount']) * 100
+
+
+# Visualize results on an appropriate graph
+plt.figure(figsize=(12, 6))
+
+# Plotting the percentage of loans recovered
+plt.subplot(1, 2, 1)
+sns.histplot(df_subset['recovered_percent'], bins=20, kde=True)
+plt.title('Percentage of Loans Recovered')
+
+# Plotting the percentage of total amount funded
+plt.subplot(1, 2, 2)
+sns.histplot(df_subset['funded_percent'], bins=20, kde=True)
+plt.title('Percentage of Total Amount Funded')
+
+plt.tight_layout()
+plt.show()
+
+### 2. Percentage of Total Amount Recovered Up to 6 Months in the Future
+
+- **Calculation:**
+  - Calculate the percentage of the total amount that will be recovered up to 6 months in the future.
+
+- **Visualization:**
+  - Visualize the results with a histogram.
+
+### 3. Charged-Off Loans Analysis
+
+- **Calculation:**
+  - Calculate the percentage of charged-off loans historically.
+  - Calculate the total amount paid towards charged-off loans.
+  - Calculate and visualize the projected loss over the remaining term of charged-off loans.
+ ```python
+# Filter the DataFrame to include only charged-off loans
+charged_off_loans = transformed_df[transformed_df['loan_status'] == 'Charged Off']
+
+# 1. Calculate the percentage of charged-off loans
+charged_off_percentage = (charged_off_loans.shape[0] / transformed_df.shape[0]) * 100
+
+# 2. Calculate the total amount paid towards charged-off loans
+total_amount_paid = charged_off_loans['funded_amount_inv'].sum()
+
+# Calculate the projected loss for each charged-off loan
+charged_off_loans['projected_loss'] = charged_off_loans['instalment'] * charged_off_loans['remaining_term']
+
+
+### 4. Customers Behind on Loan Payments
+
+- **Calculation:**
+  - Calculate the percentage of customers currently behind on payments.
+
+```python
+behind_on_payments_percentage = (len(transformed_df[transformed_df['loan_status'] == 'Late']) / len(transformed_df)) * 100
+print(f"Percentage of customers currently behind on payments: {behind_on_payments_percentage:.2f}%")
+```
+  - Calculate the total number and loss if all customers behind on payments were charged off.
+
+```python
+# Total number and loss if all customers behind on payments were charged off:
+behind_on_payments = transformed_df[transformed_df['loan_status'] == 'Late'].copy()
+total_customers_behind_on_payments = len(behind_on_payments)
+```
+  - Calculate the projected loss if customers behind on payments finish the full loan term.
+```    
+    # Projected loss if customers behind on payments finish the full loan term:
+behind_on_payments['remaining_term'] = behind_on_payments['term'].str.extract('(\d+)').astype(int)
+remaining_term_months = behind_on_payments['remaining_term']
+projected_loss = (remaining_term_months * behind_on_payments['instalment']).sum()
+print(f"Projected loss if customers behind on payments finish the full loan term: ${projected_loss:.2f}")
+```
+  - Calculate the percentage of total expected revenue represented by late and charged-off customers.
+```
+# Percentage of total expected revenue represented by late and charged-off customers:
+total_expected_revenue = transformed_df['total_payment'].sum()
+late_customers_expected_revenue = transformed_df[transformed_df['loan_status'] == 'Late']['total_payment'].sum()
+charged_off_customers_expected_revenue = transformed_df[transformed_df['loan_status'] == 'Charged Off']['total_payment'].sum()
+
+# Calculate the percentage for each group
+percentage_late_customers = (late_customers_expected_revenue / total_expected_revenue) * 100
+percentage_charged_off_customers = (charged_off_customers_expected_revenue / total_expected_revenue) * 100
+
+print(f"Percentage of total expected revenue for late customers: {percentage_late_customers:.2f}%")
+print(f"Percentage of total expected revenue for Charged Off customers: {percentage_charged_off_customers:.2f}%")
+```
+### 5. Explore Loan Status by Indicators
+
+- **Exploration and Visualization:**
+  - Explore and visualize loan status by grade, purpose, and home ownership.
+  - Compare indicators between charged-off and potential charged-off loans.
+
+
 
