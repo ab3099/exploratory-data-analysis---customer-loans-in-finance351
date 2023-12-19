@@ -30,11 +30,6 @@ plt.title('Percentage of Total Amount Funded')
 plt.tight_layout()
 plt.show()
 
-# Assuming 'transformed_df' is your DataFrame
-# Assuming 'last_payment_date' and 'issue_date' are in datetime format, if not, convert them to datetime
-transformed_df['last_payment_date'] = pd.to_datetime(transformed_df['last_payment_date'])
-transformed_df['issue_date'] = pd.to_datetime(transformed_df['issue_date'])
-
 # Calculate months since the last payment
 transformed_df['months_since_last_payment'] = (pd.to_datetime('today') - transformed_df['last_payment_date']).dt.days // 30
 print(pd.to_datetime('today'))
@@ -74,18 +69,13 @@ total_amount_paid = charged_off_loans['funded_amount_inv'].sum()
 print(f"Percentage of Charged Off Loans: {charged_off_percentage:.2f}%")
 print(f"Total Amount Paid towards Charged Off Loans: ${total_amount_paid:.2f}")
 
-# Filter the DataFrame to include only charged-off loans: 
-print(transformed_df['term'].head(20))
-print(transformed_df.columns)
+#Calculate the loss in revenue these loans would have generated for the company if they had finished their term
 
 charged_off_loans = transformed_df[transformed_df['loan_status'] == 'Charged Off'].copy()
 print(charged_off_loans['term'].head())
 charged_off_loans['remaining_term'] = charged_off_loans['term'].str.extract('(\d+)').astype(int)
 print(charged_off_loans['remaining_term'].head())
 
-
-#
-print(charged_off_loans['instalment'].head())
 
 
 # Calculate the projected loss for each charged-off loan
